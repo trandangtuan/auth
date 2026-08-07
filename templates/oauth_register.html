@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>External App Register</title>
+</head>
+<body>
+  <h1>External App Registration</h1>
+  <p>This page simulates an external application connecting to register a user.</p>
+  <form action="/api/auth/register" method="post">
+    <label>Email</label><br/>
+    <input type="email" name="email" required/><br/>
+    <label>Username</label><br/>
+    <input type="text" name="username" required/><br/>
+    <label>Full Name</label><br/>
+    <input type="text" name="full_name"/><br/>
+    <label>Password</label><br/>
+    <input type="password" name="password" required/><br/>
+    <label>Confirm Password</label><br/>
+    <input type="password" name="confirm_password" required/><br/>
+    <button type="submit">Register via External App</button>
+  </form>
+</body>
+</html>
