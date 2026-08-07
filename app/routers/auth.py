@@ -35,6 +35,8 @@ def normalize_return_url(return_url: str | None) -> str | None:
     if not return_url:
         return None
     parsed = urlparse(return_url)
+    if parsed.scheme == "" and parsed.netloc == "" and parsed.path.startswith("/") and not parsed.path.startswith("//"):
+        return return_url
     if parsed.scheme not in {"http", "https"}:
         return None
     normalized = urlunparse(parsed._replace(query="", fragment=""))

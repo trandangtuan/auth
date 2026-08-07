@@ -32,7 +32,10 @@ class Settings(BaseSettings):
 
     OAUTH_CLIENT_ID: str = "demo-client"
     OAUTH_CLIENT_SECRET: str = "demo-secret"
-    OAUTH_REDIRECT_URIS: list[str] = ["http://localhost:5174/oauth/callback"]
+    OAUTH_REDIRECT_URIS: list[str] = [
+        "http://localhost/auth/callback",
+        "http://localhost:5174/oauth/callback",
+    ]
     OAUTH_CODE_EXPIRE_SECONDS: int = 300
 
     GOOGLE_CLIENT_ID: str | None = None
