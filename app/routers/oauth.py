@@ -15,11 +15,13 @@ oauth_codes: dict[str, dict] = {}
 oauth_tokens: dict[str, dict] = {}
 
 
-def validate_client(client_id: str, redirect_uri: str) -> None:
-    if client_id != settings.OAUTH_CLIENT_ID:
+def validate_client(client_id: str, redirect_uri: str) -> dict:
+    client = settings.OAUTH_CLIENTS.get(client_id)
+    if not client:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="INVALID_CLIENT")
-    if redirect_uri not in settings.OAUTH_REDIRECT_URIS:
+    if redirect_uri not in client["redirect_uris"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="INVALID_REDIRECT_URI")
+    return client
 
 
 def add_query_params(url: str, params: dict[str, str]) -> str:
@@ -121,8 +123,8 @@ async def oauth_token(
 ):
     if grant_type != "authorization_code":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unsupported_grant_type")
-    validate_client(client_id, redirect_uri)
-    if client_secret != settings.OAUTH_CLIENT_SECRET:
+    client = validate_client(client_id, redirect_uri)
+    if client_secret != client["secret"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_client")
     stored = oauth_codes.get(code)
     if not stored or stored["used"] or stored["client_id"] != client_id or stored["redirect_uri"] != redirect_uri:

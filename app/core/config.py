@@ -30,12 +30,12 @@ class Settings(BaseSettings):
     AUTH_COOKIE_DOMAIN: str | None = None
     AUTH_RETURN_RESET_TOKEN_IN_RESPONSE: bool = False
 
-    OAUTH_CLIENT_ID: str = "demo-client"
-    OAUTH_CLIENT_SECRET: str = "demo-secret"
-    OAUTH_REDIRECT_URIS: list[str] = [
-        "http://localhost/auth/callback",
-        "http://localhost:5174/oauth/callback",
-    ]
+    OAUTH_CLIENTS: dict[str, dict[str, Any]] = {
+        "demo-client": {
+            "secret": "demo-secret",
+            "redirect_uris": ["http://localhost:5174/oauth/callback"],
+        }
+    }
     OAUTH_CODE_EXPIRE_SECONDS: int = 300
 
     GOOGLE_CLIENT_ID: str | None = None
@@ -84,13 +84,21 @@ class Settings(BaseSettings):
             raise ValueError("CORS '*' with credentials is forbidden in production")
         return v
 
-    @validator("OAUTH_REDIRECT_URIS", pre=True)
-    def normalize_oauth_redirects(cls, v: Any) -> list[str]:
+    @validator("OAUTH_CLIENTS", pre=True)
+    def normalize_oauth_clients(cls, v: Any) -> dict[str, dict[str, Any]]:
         if isinstance(v, str):
             try:
                 return json.loads(v)
             except ValueError:
-                return [item.strip() for item in v.split(",") if item.strip()]
+                raise ValueError("OAUTH_CLIENTS must be valid JSON")
+        if not isinstance(v, dict):
+            raise ValueError("OAUTH_CLIENTS must be an object")
+        for client_id, client in v.items():
+            if not isinstance(client, dict) or not client.get("secret"):
+                raise ValueError(f"OAuth client '{client_id}' must define a secret")
+            redirect_uris = client.get("redirect_uris")
+            if not isinstance(redirect_uris, list) or not redirect_uris:
+                raise ValueError(f"OAuth client '{client_id}' must define redirect_uris")
         return v
 
     @validator("GOOGLE_AUTH_SCOPES", pre=True)

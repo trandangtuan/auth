@@ -20,9 +20,7 @@ services:
       - AUTH_COOKIE_SAMESITE=lax
       - AUTH_COOKIE_DOMAIN=
       - AUTH_RETURN_RESET_TOKEN_IN_RESPONSE=false
-      - OAUTH_CLIENT_ID=demo-client
-      - OAUTH_CLIENT_SECRET=demo-secret
-      - OAUTH_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
+      - OAUTH_CLIENTS={"chat-ai":{"secret":"demo-secret","redirect_uris":["http://localhost/auth/callback"]},"web-client":{"secret":"web-secret","redirect_uris":["http://localhost:5174/oauth/callback"]}}
       - SSO_ALLOWED_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
       - FRONTEND_URL=http://localhost:5173
       - PASSWORD_RESET_URL=http://localhost:5173/reset-password
