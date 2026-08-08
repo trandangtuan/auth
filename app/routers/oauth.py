@@ -24,6 +24,13 @@ def validate_client(client_id: str, redirect_uri: str) -> dict:
     return client
 
 
+def get_default_redirect_uri(client_id: str) -> str:
+    client = settings.OAUTH_CLIENTS.get(client_id)
+    if not client:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="INVALID_CLIENT")
+    return client["redirect_uris"][0]
+
+
 def add_query_params(url: str, params: dict[str, str]) -> str:
     parsed = urlparse(url)
     query = dict(parse_qsl(parsed.query, keep_blank_values=True))
@@ -92,11 +99,12 @@ def serialize_user(user) -> dict[str, str | bool | None]:
 async def oauth_authorize_get(
     request: Request,
     client_id: str = Query(...),
-    redirect_uri: str = Query(...),
-    response_type: str = Query(...),
+    redirect_uri: str | None = Query(None),
+    response_type: str = Query("code"),
     state: str | None = Query(None),
     db: AsyncSession = Depends(get_db_session),
 ):
+    redirect_uri = redirect_uri or get_default_redirect_uri(client_id)
     return await create_authorization_response(request, client_id, redirect_uri, response_type, state, db)
 
 
