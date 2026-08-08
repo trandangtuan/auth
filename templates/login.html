@@ -634,7 +634,7 @@
 
 
             <a
-                href="/api/auth/google/login?next={{ request.query_params.get('next', '') }}"
+                href="{{ google_login_url }}"
                 class="btn btn-google"
             >
 
@@ -837,7 +837,7 @@
 
 
             <a
-                href="/api/auth/google/login?next={{ request.query_params.get('next', '') }}"
+                href="{{ google_login_url }}"
                 class="btn btn-google"
             >
 
