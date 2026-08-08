@@ -31,16 +31,16 @@ class Settings(BaseSettings):
     AUTH_RETURN_RESET_TOKEN_IN_RESPONSE: bool = False
 
     OAUTH_CLIENTS: dict[str, dict[str, Any]] = {
-        "demo-client": {
-            "secret": "demo-secret",
-            "redirect_uris": ["http://localhost:5174/oauth/callback"],
+        "chat-ai": {
+            "secret": "change-this-oauth-client-secret",
+            "redirect_uris": ["https://chat.tdshift.info/auth/callback"],
         }
     }
     OAUTH_CODE_EXPIRE_SECONDS: int = 300
 
     GOOGLE_CLIENT_ID: str | None = None
     GOOGLE_CLIENT_SECRET: str | None = None
-    GOOGLE_AUTH_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
+    GOOGLE_AUTH_REDIRECT_URI: str = "https://auth.tdshift.info/api/auth/google/callback"
     GOOGLE_AUTH_SCOPES: list[str] = ["openid", "email", "profile"]
     GOOGLE_AUTH_BASE_URL: str = "https://accounts.google.com/o/oauth2/v2/auth"
     GOOGLE_TOKEN_URL: str = "https://oauth2.googleapis.com/token"
@@ -48,13 +48,13 @@ class Settings(BaseSettings):
 
     SSO_COOKIE_NAME: str = "sso_session"
     SSO_COOKIE_EXPIRE_DAYS: int = 7
-    SSO_ALLOWED_REDIRECT_URIS: list[str] = ["http://localhost:5174/oauth/callback"]
+    SSO_ALLOWED_REDIRECT_URIS: list[str] = ["https://chat.tdshift.info/auth/callback"]
 
-    FRONTEND_URL: str = "http://localhost:5173"
-    PASSWORD_RESET_URL: str = "http://localhost:5173/reset-password"
-    EMAIL_VERIFICATION_URL: str = "http://localhost:5173/verify-email"
+    FRONTEND_URL: str = "https://auth.tdshift.info"
+    PASSWORD_RESET_URL: str = "https://auth.tdshift.info/reset-password"
+    EMAIL_VERIFICATION_URL: str = "https://auth.tdshift.info/verify-email"
 
-    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    CORS_ORIGINS: list[str] = ["https://auth.tdshift.info", "https://chat.tdshift.info"]
 
     @validator("CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, v: Any) -> list[str]:

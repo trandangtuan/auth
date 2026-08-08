@@ -3,9 +3,14 @@ services:
     build: .
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./ai_client.db
-      - JWT_SECRET_KEY=replace-with-a-long-random-secret
+      - APP_ENV=production
+      - APP_DEBUG=false
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in auth/.env}
       - JWT_ALGORITHM=HS256
       - ACCESS_TOKEN_EXPIRE_MINUTES=15
       - REFRESH_TOKEN_EXPIRE_DAYS=30
@@ -14,16 +19,17 @@ services:
       - AUTH_MAX_LOGIN_ATTEMPTS=5
       - AUTH_LOCK_MINUTES=15
       - AUTH_REFRESH_TOKEN_TRANSPORT=cookie
-      - AUTH_COOKIE_SECURE=false
+      - AUTH_COOKIE_SECURE=true
       - AUTH_COOKIE_SAMESITE=lax
-      - AUTH_COOKIE_DOMAIN=
+      - AUTH_COOKIE_DOMAIN=.tdshift.info
       - AUTH_RETURN_RESET_TOKEN_IN_RESPONSE=false
-      - OAUTH_CLIENTS={"chat-ai":{"secret":"demo-secret","redirect_uris":["http://localhost/auth/callback"]},"web-client":{"secret":"web-secret","redirect_uris":["http://localhost:5174/oauth/callback"]}}
-      - SSO_ALLOWED_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
-      - FRONTEND_URL=http://localhost:5173
-      - PASSWORD_RESET_URL=http://localhost:5173/reset-password
-      - EMAIL_VERIFICATION_URL=http://localhost:5173/verify-email
-      - CORS_ORIGINS=["http://localhost:5173"]
+      - OAUTH_CLIENTS={"chat-ai":{"secret":"${OAUTH_CHAT_CLIENT_SECRET:?set OAUTH_CHAT_CLIENT_SECRET in auth/.env}","redirect_uris":["${CHAT_OAUTH_REDIRECT_URI:-https://chat.tdshift.info/auth/callback}"]}}
+      - SSO_ALLOWED_REDIRECT_URIS=["${CHAT_OAUTH_REDIRECT_URI:-https://chat.tdshift.info/auth/callback}"]
+      - FRONTEND_URL=https://auth.tdshift.info
+      - PASSWORD_RESET_URL=https://auth.tdshift.info/reset-password
+      - EMAIL_VERIFICATION_URL=https://auth.tdshift.info/verify-email
+      - GOOGLE_AUTH_REDIRECT_URI=https://auth.tdshift.info/api/auth/google/callback
+      - CORS_ORIGINS=["https://auth.tdshift.info","${CHAT_FRONTEND_URL:-https://chat.tdshift.info}"]
     volumes:
       - .:/app
 

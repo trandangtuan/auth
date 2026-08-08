@@ -29,13 +29,13 @@ docker compose exec backend alembic upgrade head
 API chạy tại:
 
 ```text
-http://localhost:8000
+https://auth.tdshift.info
 ```
 
 Trang đăng nhập:
 
 ```text
-http://localhost:8000/login
+https://auth.tdshift.info/login
 ```
 
 ## Cấu hình quan trọng cho SSO
@@ -43,15 +43,17 @@ http://localhost:8000/login
 Các biến cần kiểm tra kỹ trong `docker-compose.yml` hoặc `.env`:
 
 ```env
-JWT_SECRET_KEY=replace-with-a-long-random-secret
+JWT_SECRET_KEY=change-this-to-a-long-random-production-secret
+OAUTH_CHAT_CLIENT_SECRET=change-this-to-the-same-secret-used-by-chat
 AUTH_REFRESH_TOKEN_TRANSPORT=cookie
-AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SECURE=true
 AUTH_COOKIE_SAMESITE=lax
-AUTH_COOKIE_DOMAIN=
+AUTH_COOKIE_DOMAIN=.tdshift.info
 SSO_COOKIE_NAME=sso_session
 SSO_COOKIE_EXPIRE_DAYS=7
-SSO_ALLOWED_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
-OAUTH_CLIENTS={"web-client":{"secret":"web-secret","redirect_uris":["http://localhost:5174/oauth/callback"]}}
+SSO_ALLOWED_REDIRECT_URIS=["https://chat.tdshift.info/auth/callback"]
+OAUTH_CLIENTS={"chat-ai":{"secret":"<same-as-OAUTH_CHAT_CLIENT_SECRET>","redirect_uris":["https://chat.tdshift.info/auth/callback"]}}
+CORS_ORIGINS=["https://auth.tdshift.info","https://chat.tdshift.info"]
 ```
 
 Lưu ý production:
@@ -67,7 +69,7 @@ Lưu ý production:
 Ứng dụng bên ngoài chuyển người dùng tới Auth Service:
 
 ```text
-GET /api/auth/sso/check?next=http://localhost:5174/oauth/callback
+GET /api/auth/sso/check?next=https://chat.tdshift.info/auth/callback
 ```
 
 Nếu cookie `sso_session` hợp lệ, Auth Service redirect ngay về `next`.
@@ -75,7 +77,7 @@ Nếu cookie `sso_session` hợp lệ, Auth Service redirect ngay về `next`.
 Nếu chưa có phiên SSO, Auth Service redirect tới:
 
 ```text
-/sso/login?next=http%3A%2F%2Flocalhost%3A5174%2Foauth%2Fcallback
+/sso/login?next=https%3A%2F%2Fchat.tdshift.info%2Fauth%2Fcallback
 ```
 
 Sau khi người dùng đăng nhập thành công, Auth Service đặt cookie `sso_session`, đặt cookie `refresh_token` nếu cấu hình dùng cookie, rồi redirect về `next`.
@@ -87,7 +89,7 @@ OAuth flow dùng khi app bên ngoài muốn đổi authorization code lấy acce
 1. App redirect trình duyệt tới:
 
    ```text
-   GET /oauth/authorize?client_id=web-client&redirect_uri=http://localhost:5174/oauth/callback&response_type=code&state=abc
+   GET /oauth/authorize?client_id=chat-ai&redirect_uri=https://chat.tdshift.info/auth/callback&response_type=code&state=abc
    ```
 
 2. Nếu người dùng chưa đăng nhập SSO, Auth Service chuyển về `/login?next=...`.
@@ -97,19 +99,19 @@ OAuth flow dùng khi app bên ngoài muốn đổi authorization code lấy acce
 4. App đổi code lấy token:
 
    ```bash
-   curl -X POST http://localhost:8000/oauth/token \
+   curl -X POST https://auth.tdshift.info/oauth/token \
      -H "Content-Type: application/x-www-form-urlencoded" \
      -d "grant_type=authorization_code" \
      -d "code=<code>" \
-     -d "redirect_uri=http://localhost:5174/oauth/callback" \
-     -d "client_id=web-client" \
-     -d "client_secret=web-secret"
+     -d "redirect_uri=https://chat.tdshift.info/auth/callback" \
+     -d "client_id=chat-ai" \
+     -d "client_secret=<OAUTH_CHAT_CLIENT_SECRET>"
    ```
 
 5. App lấy user info:
 
    ```bash
-   curl http://localhost:8000/oauth/userinfo \
+   curl https://auth.tdshift.info/oauth/userinfo \
      -H "Authorization: Bearer <access_token>"
    ```
 
