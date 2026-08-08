@@ -1,35 +1,123 @@
-# Multi User AI Client - Authentication Module
+# Authentication Module
 
-This repository contains a working authentication microservice built with FastAPI, SQLite, SQLAlchemy Async, Alembic, Pydantic v2, JWT, Argon2, and Docker Compose.
+Module xác thực cho hệ thống multi-app, xây bằng FastAPI, SQLAlchemy Async, SQLite, Alembic, Pydantic Settings, JWT, Argon2 và Docker Compose.
 
-## Features
+Trọng tâm của module là đăng nhập tập trung bằng SSO: người dùng đăng nhập một lần tại Auth Service, sau đó các ứng dụng khác có thể kiểm tra phiên SSO và nhận người dùng quay lại qua redirect an toàn.
 
-- User registration
-- Login with email or username
-- Logout and logout-all
-- Access token / refresh token rotation
-- Password reset flow
-- Change password
-- Email verification
-- Session management
-- Account lockout after failed login attempts
-- Rate limiting for critical endpoints
+## Chức năng chính
 
-## Local Setup
+- Đăng ký tài khoản bằng email, username và mật khẩu.
+- Đăng nhập bằng email hoặc username.
+- Đăng nhập SSO bằng cookie `sso_session`.
+- Kiểm tra SSO cho ứng dụng bên ngoài qua `/api/auth/sso/check`.
+- OAuth 2.0 authorization code flow nội bộ qua `/oauth/authorize`, `/oauth/token`, `/oauth/userinfo`.
+- Đăng nhập Google OAuth, tự tạo user nếu email chưa tồn tại.
+- Access token JWT và refresh token rotation.
+- Refresh token qua HTTP-only cookie hoặc body, tùy cấu hình.
+- Đăng xuất SSO và xóa refresh cookie.
+- Quản lý phiên đăng nhập.
+- Quên mật khẩu, reset mật khẩu, đổi mật khẩu.
+- Xác thực email.
 
-1. Copy `.env.example` to `.env` and adjust values.
-2. Start services:
-   ```bash
-   docker compose up --build
+## Khởi động nhanh
+
+```bash
+docker compose up --build
+docker compose exec backend alembic upgrade head
+```
+
+API chạy tại:
+
+```text
+http://localhost:8000
+```
+
+Trang đăng nhập:
+
+```text
+http://localhost:8000/login
+```
+
+## Cấu hình quan trọng cho SSO
+
+Các biến cần kiểm tra kỹ trong `docker-compose.yml` hoặc `.env`:
+
+```env
+JWT_SECRET_KEY=replace-with-a-long-random-secret
+AUTH_REFRESH_TOKEN_TRANSPORT=cookie
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAMESITE=lax
+AUTH_COOKIE_DOMAIN=
+SSO_COOKIE_NAME=sso_session
+SSO_COOKIE_EXPIRE_DAYS=7
+SSO_ALLOWED_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
+OAUTH_CLIENTS={"web-client":{"secret":"web-secret","redirect_uris":["http://localhost:5174/oauth/callback"]}}
+```
+
+Lưu ý production:
+
+- `JWT_SECRET_KEY` phải đủ dài, ngẫu nhiên và không dùng giá trị demo.
+- `AUTH_COOKIE_SECURE=true` khi chạy HTTPS.
+- `AUTH_COOKIE_DOMAIN` cần đúng domain chung nếu nhiều app dùng chung SSO trên subdomain.
+- `SSO_ALLOWED_REDIRECT_URIS` phải chứa đúng URL app được phép nhận redirect.
+- `OAUTH_CLIENTS.*.redirect_uris` phải khớp tuyệt đối với `redirect_uri` khi gọi OAuth.
+
+## Luồng SSO
+
+Ứng dụng bên ngoài chuyển người dùng tới Auth Service:
+
+```text
+GET /api/auth/sso/check?next=http://localhost:5174/oauth/callback
+```
+
+Nếu cookie `sso_session` hợp lệ, Auth Service redirect ngay về `next`.
+
+Nếu chưa có phiên SSO, Auth Service redirect tới:
+
+```text
+/sso/login?next=http%3A%2F%2Flocalhost%3A5174%2Foauth%2Fcallback
+```
+
+Sau khi người dùng đăng nhập thành công, Auth Service đặt cookie `sso_session`, đặt cookie `refresh_token` nếu cấu hình dùng cookie, rồi redirect về `next`.
+
+## Luồng OAuth nội bộ
+
+OAuth flow dùng khi app bên ngoài muốn đổi authorization code lấy access token và user info.
+
+1. App redirect trình duyệt tới:
+
+   ```text
+   GET /oauth/authorize?client_id=web-client&redirect_uri=http://localhost:5174/oauth/callback&response_type=code&state=abc
    ```
-3. Run migrations:
+
+2. Nếu người dùng chưa đăng nhập SSO, Auth Service chuyển về `/login?next=...`.
+
+3. Nếu đã đăng nhập, Auth Service redirect về `redirect_uri` kèm `code` và `state`.
+
+4. App đổi code lấy token:
+
    ```bash
-   docker compose exec backend alembic upgrade head
+   curl -X POST http://localhost:8000/oauth/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=authorization_code" \
+     -d "code=<code>" \
+     -d "redirect_uri=http://localhost:5174/oauth/callback" \
+     -d "client_id=web-client" \
+     -d "client_secret=web-secret"
    ```
-4. The API server will be available at `http://localhost:8000`.
 
-## API Endpoints
+5. App lấy user info:
 
+   ```bash
+   curl http://localhost:8000/oauth/userinfo \
+     -H "Authorization: Bearer <access_token>"
+   ```
+
+## Endpoint chính
+
+### Auth API
+
+- `GET /api/auth/health`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
@@ -44,32 +132,35 @@ This repository contains a working authentication microservice built with FastAP
 - `POST /api/auth/verify-email`
 - `GET /api/auth/sessions`
 - `DELETE /api/auth/sessions/{session_id}`
-- `POST /oauth/authorize`
-- `POST /oauth/token`
+- `GET /api/auth/sso/check`
 - `GET /api/auth/google/login`
 - `GET /api/auth/google/callback`
+
+### OAuth API
+
+- `GET /oauth/authorize`
+- `POST /oauth/authorize`
+- `POST /oauth/token`
+- `GET /oauth/userinfo`
+
+### Web views
+
+- `GET /login`
+- `GET /sso/login`
+- `GET /register`
 - `GET /profile`
 - `GET /logout`
-- `GET /api/auth/sso/check`
-- `GET /sso/login`
+- `GET /oauth/register`
 
-## OAuth Provider Simulation
+## Lỗi thường gặp khi tích hợp SSO
 
-This backend includes a simple OAuth 2.0 authorization code flow for external apps.- Google OAuth login flow for end users.
-- `POST /oauth/authorize` - redirect to the provided `redirect_uri` with an authorization code.
-- `POST /oauth/token` - exchange the code for an access token.
+- Đăng nhập xong không quay về app: kiểm tra `next` có nằm trong `SSO_ALLOWED_REDIRECT_URIS` không.
+- `/oauth/token` trả `invalid_grant`: code đã dùng, hết hạn, sai `client_id`, hoặc sai `redirect_uri`.
+- `/oauth/authorize` trả `INVALID_REDIRECT_URI`: `redirect_uri` không khớp cấu hình `OAUTH_CLIENTS`.
+- Cookie không lưu trên browser: kiểm tra HTTPS, `AUTH_COOKIE_SECURE`, `AUTH_COOKIE_SAMESITE`, domain và port.
+- Google login báo `GOOGLE_OAUTH_NOT_CONFIGURED`: thiếu `GOOGLE_CLIENT_ID` hoặc `GOOGLE_CLIENT_SECRET`.
 
-## SSO Session Support
-
-This backend supports SSO session checks across multiple applications. External apps can redirect users to `/api/auth/sso/check?next=<return_url>`.
-
-- If the user already has an active SSO session cookie, they are redirected back to the app immediately.
-- If the user does not have an active SSO session, they are redirected to `/sso/login?next=<return_url>`.
-- After successful login, the user is redirected back to the original `next` URL.
-
-## Testing
-
-Run tests with:
+## Kiểm tra
 
 ```bash
 pytest -q

@@ -1,82 +1,187 @@
 # Hướng dẫn sử dụng Authentication Module
 
-## Khởi động môi trường
+Tài liệu này tập trung vào luồng đăng nhập SSO, vì đây là phần quan trọng nhất khi kết nối Auth Service với các ứng dụng khác.
 
-1. Sao chép file cấu hình:
-   ```bash
-   cp .env.example .env
-   ```
-2. Chỉnh sửa `.env` nếu cần.
-3. Khởi động dịch vụ bằng Docker Compose:
-   ```bash
-   docker compose up --build
-   ```
-4. Chạy migration:
-   ```bash
-   docker compose exec backend alembic upgrade head
-   ```
-5. Mở ứng dụng tại:
-   ```
-   http://localhost:8000
-   ```
+## Chạy local
 
-## Các endpoint chính
+```bash
+docker compose up --build
+docker compose exec backend alembic upgrade head
+```
 
-- `POST /api/auth/register` - Đăng ký người dùng mới.
-- `POST /api/auth/login` - Đăng nhập với email hoặc username.
-- `POST /api/auth/refresh` - Làm mới access token.
-- `POST /api/auth/logout` - Đăng xuất.
-- `POST /api/auth/logout-all` - Đăng xuất tất cả thiết bị.
-- `GET /api/auth/me` - Lấy thông tin người dùng hiện tại.
-- `POST /api/auth/forgot-password` - Yêu cầu đặt lại mật khẩu.
-- `POST /api/auth/validate-reset-token` - Kiểm tra tính hợp lệ token đặt lại mật khẩu.
-- `POST /api/auth/reset-password` - Đặt lại mật khẩu.
-- `POST /api/auth/change-password` - Đổi mật khẩu khi đăng nhập.
-- `POST /api/auth/resend-verification-email` - Gửi lại email xác thực.
-- `POST /api/auth/verify-email` - Xác thực email.
-- `GET /api/auth/sessions` - Liệt kê phiên đăng nhập.
-- `DELETE /api/auth/sessions/{session_id}` - Thu hồi một phiên.
-- `GET /api/auth/sso/check` - Kiểm tra SSO hiện có và redirect về ứng dụng.
-- `GET /sso/login` - Form đăng nhập SSO.
-- `POST /api/auth/logout` - Đăng xuất SSO.
+Mở:
 
-## Sử dụng SSO
+```text
+http://localhost:8000/login
+```
 
-1. Ứng dụng thứ ba chuyển hướng người dùng tới:
-   ```
-   /api/auth/sso/check?next=https://app.example.com/callback
-   ```
-2. Nếu đã đăng nhập, backend sẽ redirect về `next` ngay.
-3. Nếu chưa đăng nhập, backend sẽ redirect tới `/sso/login?next=...`.
-4. Sau khi login thành công, backend sẽ trả về `next` và đặt cookie SSO.
+## Cấu hình tối thiểu
 
-## Sử dụng API đăng ký
+Ví dụ cấu hình local trong `docker-compose.yml`:
 
-Request:
+```env
+JWT_SECRET_KEY=replace-with-a-long-random-secret
+AUTH_REFRESH_TOKEN_TRANSPORT=cookie
+AUTH_COOKIE_SECURE=false
+AUTH_COOKIE_SAMESITE=lax
+AUTH_COOKIE_DOMAIN=
+SSO_COOKIE_NAME=sso_session
+SSO_ALLOWED_REDIRECT_URIS=["http://localhost:5174/oauth/callback"]
+OAUTH_CLIENTS={"web-client":{"secret":"web-secret","redirect_uris":["http://localhost:5174/oauth/callback"]}}
+CORS_ORIGINS=["http://localhost:5173"]
+```
+
+`SSO_ALLOWED_REDIRECT_URIS` dùng để chặn open redirect. Chỉ các URL nằm trong danh sách này mới được dùng làm `next`.
+
+`OAUTH_CLIENTS` dùng cho OAuth authorization code flow. `redirect_uri` gửi lên phải khớp với một URL trong `redirect_uris` của client.
+
+## Đăng nhập SSO cho app bên ngoài
+
+App bên ngoài redirect người dùng đến:
+
+```text
+http://localhost:8000/api/auth/sso/check?next=http://localhost:5174/oauth/callback
+```
+
+Kết quả:
+
+- Nếu đã có cookie `sso_session` hợp lệ, Auth Service redirect thẳng về `next`.
+- Nếu chưa đăng nhập, Auth Service redirect tới `/sso/login?next=...`.
+- Sau khi login thành công, Auth Service đặt cookie SSO và redirect về `next`.
+
+Form login SSO gửi request:
+
+```http
+POST /api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+login=user@example.com&password=StrongPassword123!&next=http://localhost:5174/oauth/callback
+```
+
+Response thành công có redirect `303` về `next` và set cookie:
+
+```text
+sso_session=<jwt>; HttpOnly; Path=/
+refresh_token=<token>; HttpOnly; Path=/
+```
+
+## OAuth authorization code flow
+
+Dùng luồng này khi app cần lấy access token riêng và thông tin user.
+
+### 1. Redirect tới authorize
+
+```text
+http://localhost:8000/oauth/authorize?client_id=web-client&redirect_uri=http://localhost:5174/oauth/callback&response_type=code&state=random-state
+```
+
+Nếu user đã có SSO, Auth Service redirect về:
+
+```text
+http://localhost:5174/oauth/callback?code=<code>&state=random-state
+```
+
+### 2. Đổi code lấy token
+
+```bash
+curl -X POST http://localhost:8000/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "code=<code>" \
+  -d "redirect_uri=http://localhost:5174/oauth/callback" \
+  -d "client_id=web-client" \
+  -d "client_secret=web-secret"
+```
+
+Response:
+
 ```json
 {
-  "email": "user@example.com",
-  "username": "demo",
-  "password": "StrongPassword123!",
-  "confirm_password": "StrongPassword123!",
-  "full_name": "Nguyễn Văn A"
+  "access_token": "...",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "scope": "openid profile email",
+  "user": {
+    "sub": "...",
+    "id": "...",
+    "email": "user@example.com",
+    "username": "demo",
+    "name": "Nguyen Van A",
+    "email_verified": true
+  }
 }
 ```
 
-## Sử dụng API đăng nhập
+### 3. Lấy user info
 
-Request:
-```json
-{
-  "login": "user@example.com",
-  "password": "StrongPassword123!",
-  "device_name": "Chrome on Ubuntu"
-}
+```bash
+curl http://localhost:8000/oauth/userinfo \
+  -H "Authorization: Bearer <access_token>"
 ```
 
-## Ghi chú
+## API đăng ký
 
-- Backend hiện tại không dùng Redis. Token blacklist và rate limiting không được cấu hình trong phiên bản này.
-- Reset password token chỉ lưu hash trong database.
-- Access token là JWT, refresh token không lưu trong database dưới dạng plaintext.
-- Trong môi trường phát triển, reset token có thể được trả về trực tiếp để test.
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "username": "demo",
+    "password": "StrongPassword123!",
+    "confirm_password": "StrongPassword123!",
+    "full_name": "Nguyen Van A"
+  }'
+```
+
+Mật khẩu cần có ít nhất 8 ký tự, chữ thường, chữ hoa, số và ký tự đặc biệt.
+
+## API đăng nhập thường
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "login=user@example.com" \
+  -d "password=StrongPassword123!" \
+  -d "device_name=Chrome on Ubuntu"
+```
+
+Nếu không truyền `next`, API trả JSON có `access_token`. Nếu có `next` hợp lệ, API redirect và set cookie SSO.
+
+## Đăng xuất
+
+Đăng xuất bằng web view:
+
+```text
+GET /logout
+```
+
+Đăng xuất bằng API:
+
+```http
+POST /api/auth/logout
+Content-Type: application/x-www-form-urlencoded
+
+next=http://localhost:5174/oauth/callback
+```
+
+API xóa `sso_session` và `refresh_token`, sau đó redirect về `next` nếu URL hợp lệ.
+
+## Checklist kiểm lỗi SSO
+
+- `next` hoặc `redirect_uri` phải nằm trong allowlist.
+- Với OAuth, `client_id`, `client_secret` và `redirect_uri` phải khớp `OAUTH_CLIENTS`.
+- Authorization code chỉ dùng một lần và hết hạn sau `OAUTH_CODE_EXPIRE_SECONDS`.
+- Browser chỉ gửi cookie đúng domain/path/samesite. Khi production dùng HTTPS, bật `AUTH_COOKIE_SECURE=true`.
+- Nếu nhiều app chạy trên subdomain, cấu hình `AUTH_COOKIE_DOMAIN` về domain chung, ví dụ `.example.com`.
+- Không dùng `JWT_SECRET_KEY` demo ở production.
+
+## Endpoint nhanh
+
+- `GET /api/auth/sso/check` - kiểm tra phiên SSO và redirect.
+- `POST /api/auth/login` - đăng nhập, đặt SSO cookie nếu login thành công.
+- `POST /api/auth/logout` - xóa SSO cookie và refresh cookie.
+- `GET /oauth/authorize` - tạo authorization code.
+- `POST /oauth/token` - đổi code lấy access token.
+- `GET /oauth/userinfo` - lấy thông tin user từ OAuth access token.
+- `GET /api/auth/google/login` - bắt đầu Google OAuth.
+- `GET /api/auth/google/callback` - callback Google OAuth.

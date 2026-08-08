@@ -9,6 +9,7 @@ from app.core.database import get_db_session
 from app.core.security import decode_sso_token
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
+from app.routers.auth import normalize_return_url
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -42,10 +43,15 @@ async def login_view(request: Request, db: AsyncSession = Depends(get_db_session
 
 
 @router.get("/sso/login", response_class=HTMLResponse)
-async def sso_login_view(request: Request, db: AsyncSession = Depends(get_db_session)) -> HTMLResponse:
+async def sso_login_view(
+    request: Request,
+    next: str | None = None,
+    db: AsyncSession = Depends(get_db_session),
+) -> HTMLResponse:
     current_user = await _get_current_user(request, db)
     if current_user:
-        return RedirectResponse(url="/profile", status_code=status.HTTP_303_SEE_OTHER)
+        redirect_target = normalize_return_url(next)
+        return RedirectResponse(url=redirect_target or "/profile", status_code=status.HTTP_303_SEE_OTHER)
     return templates.TemplateResponse(request, "login.html")
 
 
