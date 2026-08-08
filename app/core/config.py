@@ -2,7 +2,7 @@ import json
 import os
 from functools import lru_cache
 from typing import Any
-from pydantic import AnyUrl, validator
+from pydantic import AnyUrl, model_validator, validator
 from pydantic_settings import BaseSettings
 
 
@@ -36,6 +36,9 @@ class Settings(BaseSettings):
             "redirect_uris": ["https://chat.tdshift.info/auth/callback"],
         }
     }
+    OAUTH_CHAT_CLIENT_SECRET: str | None = None
+    CHAT_OAUTH_REDIRECT_URI: str = "https://chat.tdshift.info/auth/callback"
+    CHAT_FRONTEND_URL: str = "https://chat.tdshift.info"
     OAUTH_CODE_EXPIRE_SECONDS: int = 300
 
     GOOGLE_CLIENT_ID: str | None = None
@@ -118,6 +121,32 @@ class Settings(BaseSettings):
             except ValueError:
                 return [item.strip() for item in v.split(",") if item.strip()]
         return v
+
+    @model_validator(mode="after")
+    def assemble_chat_oauth_client(self):
+        if self.OAUTH_CHAT_CLIENT_SECRET:
+            oauth_clients = dict(self.OAUTH_CLIENTS)
+            chat_client = dict(oauth_clients.get("chat-ai", {}))
+            redirect_uris = list(chat_client.get("redirect_uris") or [])
+            if self.CHAT_OAUTH_REDIRECT_URI not in redirect_uris:
+                redirect_uris.append(self.CHAT_OAUTH_REDIRECT_URI)
+            chat_client.update({
+                "secret": self.OAUTH_CHAT_CLIENT_SECRET,
+                "redirect_uris": redirect_uris,
+            })
+            oauth_clients["chat-ai"] = chat_client
+            self.OAUTH_CLIENTS = oauth_clients
+
+        if self.CHAT_OAUTH_REDIRECT_URI not in self.SSO_ALLOWED_REDIRECT_URIS:
+            self.SSO_ALLOWED_REDIRECT_URIS = [
+                *self.SSO_ALLOWED_REDIRECT_URIS,
+                self.CHAT_OAUTH_REDIRECT_URI,
+            ]
+
+        if self.CHAT_FRONTEND_URL not in self.CORS_ORIGINS:
+            self.CORS_ORIGINS = [*self.CORS_ORIGINS, self.CHAT_FRONTEND_URL]
+
+        return self
 
     class Config:
         env_file = ".env"
