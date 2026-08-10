@@ -150,11 +150,11 @@ OAuth flow dùng khi app bên ngoài muốn đổi authorization code lấy acce
 Prefer convention-based env vars instead of a long `OAUTH_CLIENTS` JSON when many services connect to SSO:
 
 ```env
-OAUTH_CLIENT_IDS=chat-ai,rag-ai
+OAUTH_CLIENT_IDS=chat-ai,billing-api
 OAUTH_CLIENT_CHAT_AI_SECRET=chat-secret
 OAUTH_CLIENT_CHAT_AI_REDIRECT_URIS=https://chat.tdshift.info/auth/callback
-OAUTH_CLIENT_RAG_AI_SECRET=rag-secret
-OAUTH_CLIENT_RAG_AI_REDIRECT_URIS=https://rag.tdshift.info/auth/callback,http://localhost:8010/auth/callback
+OAUTH_CLIENT_BILLING_API_SECRET=billing-secret
+OAUTH_CLIENT_BILLING_API_REDIRECT_URIS=https://billing.example.com/auth/callback
 ```
 
 For a new service id like `billing-api`, add it to `OAUTH_CLIENT_IDS` and define:
