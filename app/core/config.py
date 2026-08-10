@@ -36,8 +36,7 @@ class Settings(BaseSettings):
             "redirect_uris": ["https://chat.tdshift.info/auth/callback"],
         }
     }
-    OAUTH_CHAT_CLIENT_SECRET: str | None = None
-    CHAT_OAUTH_REDIRECT_URI: str = "https://chat.tdshift.info/auth/callback"
+    OAUTH_CLIENT_IDS: str | list[str] = ""
     CHAT_FRONTEND_URL: str = "https://chat.tdshift.info"
     OAUTH_CODE_EXPIRE_SECONDS: int = 300
 
@@ -123,25 +122,42 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def assemble_chat_oauth_client(self):
-        if self.OAUTH_CHAT_CLIENT_SECRET:
-            oauth_clients = dict(self.OAUTH_CLIENTS)
-            chat_client = dict(oauth_clients.get("chat-ai", {}))
-            redirect_uris = list(chat_client.get("redirect_uris") or [])
-            if self.CHAT_OAUTH_REDIRECT_URI not in redirect_uris:
-                redirect_uris.append(self.CHAT_OAUTH_REDIRECT_URI)
-            chat_client.update({
-                "secret": self.OAUTH_CHAT_CLIENT_SECRET,
-                "redirect_uris": redirect_uris,
-            })
-            oauth_clients["chat-ai"] = chat_client
-            self.OAUTH_CLIENTS = oauth_clients
+    def assemble_oauth_clients_from_env(self):
+        oauth_clients = dict(self.OAUTH_CLIENTS)
 
-        if self.CHAT_OAUTH_REDIRECT_URI not in self.SSO_ALLOWED_REDIRECT_URIS:
-            self.SSO_ALLOWED_REDIRECT_URIS = [
-                *self.SSO_ALLOWED_REDIRECT_URIS,
-                self.CHAT_OAUTH_REDIRECT_URI,
-            ]
+        for client_id in parse_env_list(self.OAUTH_CLIENT_IDS):
+            env_prefix = oauth_client_env_prefix(client_id)
+            secret = os.getenv(f"OAUTH_CLIENT_{env_prefix}_SECRET")
+            redirect_uris = parse_env_list(os.getenv(f"OAUTH_CLIENT_{env_prefix}_REDIRECT_URIS"))
+            if not secret or not redirect_uris:
+                if self.APP_ENV == "production":
+                    raise ValueError(
+                        f"OAuth client '{client_id}' requires "
+                        f"OAUTH_CLIENT_{env_prefix}_SECRET and "
+                        f"OAUTH_CLIENT_{env_prefix}_REDIRECT_URIS"
+                    )
+                continue
+
+            client = dict(oauth_clients.get(client_id, {}))
+            merged_redirects = list(client.get("redirect_uris") or [])
+            for redirect_uri in redirect_uris:
+                if redirect_uri not in merged_redirects:
+                    merged_redirects.append(redirect_uri)
+            client.update({
+                "secret": secret,
+                "redirect_uris": merged_redirects,
+            })
+            oauth_clients[client_id] = client
+
+        self.OAUTH_CLIENTS = oauth_clients
+
+        for client in self.OAUTH_CLIENTS.values():
+            for redirect_uri in client.get("redirect_uris") or []:
+                if redirect_uri not in self.SSO_ALLOWED_REDIRECT_URIS:
+                    self.SSO_ALLOWED_REDIRECT_URIS = [
+                        *self.SSO_ALLOWED_REDIRECT_URIS,
+                        redirect_uri,
+                    ]
 
         if self.CHAT_FRONTEND_URL not in self.CORS_ORIGINS:
             self.CORS_ORIGINS = [*self.CORS_ORIGINS, self.CHAT_FRONTEND_URL]
@@ -156,6 +172,22 @@ class Settings(BaseSettings):
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def oauth_client_env_prefix(client_id: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in client_id.upper())
+
+
+def parse_env_list(value: str | None) -> list[str]:
+    if not value:
+        return []
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    except ValueError:
+        pass
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 settings = get_settings()
